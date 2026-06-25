@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FRP Statement Cleaner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#10261f;        /* deep felt green-black */
+    --felt:#0f3d2e;       /* poker felt */
+    --felt-2:#155c43;
+    --gold:#c9a227;       /* chip gold */
+    --paper:#f6f4ee;
+    --line:#d8d3c6;
+    --dep:#e3efe6;        /* deposit row */
+    --dep-edge:#2f7d52;
+    --wd:#f7e3da;         /* withdraw row */
+    --wd-edge:#b4502f;
+    --muted:#6c6a60;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Segoe UI',-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px 80px}
+
+  header.hero{
+    background:
+      radial-gradient(120% 140% at 80% -10%, var(--felt-2) 0%, var(--felt) 55%, var(--ink) 100%);
+    color:#f3f1e8;
+    padding:34px 20px 30px;
+    border-bottom:3px solid var(--gold);
+  }
+  .hero-inner{max-width:1040px;margin:0 auto;padding:0 0}
+  .eyebrow{
+    font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--gold);font-weight:600;margin:0 0 8px;
+  }
+  h1{font-size:30px;line-height:1.1;margin:0 0 8px;font-weight:700;letter-spacing:-.01em}
+  .hero p{margin:0;max-width:64ch;color:#cfe0d6;font-size:15px}
+
+  .drop{
+    display:block;
+    width:100%;
+    box-sizing:border-box;
+    margin-top:26px;
+    background:#fff;
+    border:2px dashed var(--line);
+    border-radius:14px;
+    padding:38px 24px;
+    text-align:center;
+    transition:border-color .15s, background .15s;
+    cursor:pointer;
+  }
+  .drop.hot{border-color:var(--dep-edge);background:#f1f8f3}
+  .drop .chip{
+    width:46px;height:46px;border-radius:50%;
+    background:var(--gold);
+    border:3px dashed #fff;
+    box-shadow:0 0 0 3px var(--gold);
+    margin:0 auto 14px;
+    display:flex;align-items:center;justify-content:center;
+    color:#3a2f06;font-weight:800;font-size:13px;
+  }
+  .drop b{font-size:16px}
+  .drop small{display:block;color:var(--muted);margin-top:6px}
+  input[type=file]{display:none}
+
+  .panel{
+    background:#fff;border:1px solid var(--line);border-radius:14px;
+    margin-top:22px;overflow:hidden;
+  }
+  .panel-head{
+    display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;
+    padding:16px 18px;border-bottom:1px solid var(--line);background:#fbfaf6;
+  }
+  .stats{display:flex;flex-wrap:wrap;gap:22px}
+  .stat .v{font-size:18px;font-weight:700}
+  .stat .l{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .stat.dep .v{color:var(--dep-edge)}
+  .stat.wd .v{color:var(--wd-edge)}
+
+  .btn{
+    appearance:none;border:0;cursor:pointer;font:inherit;font-weight:600;
+    background:var(--felt);color:#fff;padding:11px 18px;border-radius:9px;
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .btn:hover{background:var(--felt-2)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.ghost{background:transparent;color:var(--felt);border:1px solid var(--felt)}
+  .btn.ghost:hover{background:#eef4f0}
+
+  .tablewrap{max-height:60vh;overflow:auto}
+  table{border-collapse:collapse;width:100%;font-size:13.5px}
+  thead th{
+    position:sticky;top:0;background:var(--felt);color:#fff;
+    text-align:left;padding:10px 12px;font-weight:600;white-space:nowrap;
+    border-right:1px solid rgba(255,255,255,.12);
+  }
+  tbody td{padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  tbody td.num{text-align:right;font-variant-numeric:tabular-nums}
+  tbody tr.dep{background:var(--dep)}
+  tbody tr.dep td:first-child{box-shadow:inset 3px 0 0 var(--dep-edge)}
+  tbody tr.wd{background:var(--wd)}
+  tbody tr.wd td:first-child{box-shadow:inset 3px 0 0 var(--wd-edge)}
+  .badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px}
+  .badge.dep{background:var(--dep-edge);color:#fff}
+  .badge.wd{background:var(--wd-edge);color:#fff}
+
+  tfoot td{padding:10px 12px;font-weight:700;background:#fbfaf6;border-top:2px solid var(--felt)}
+  tfoot td.num{text-align:right;font-variant-numeric:tabular-nums}
+
+  .hint{margin-top:14px;color:var(--muted);font-size:13px}
+  .err{
+    margin-top:18px;background:#fdece4;border:1px solid var(--wd-edge);
+    color:#7d2f15;border-radius:10px;padding:14px 16px;font-size:14px;
+  }
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px 16px;padding:12px 18px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+  .meta-row b{color:var(--ink)}
+  .field{display:flex;align-items:center;gap:6px;font-size:13px}
+  .field input{border:1px solid var(--line);border-radius:7px;padding:6px 9px;font:inherit;width:220px}
+  footer.note{margin-top:30px;font-size:12px;color:var(--muted);text-align:center}
+  @media (max-width:620px){
+    h1{font-size:24px}
+    .field input{width:150px}
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">FRP · Payments</p>
+    <h1>Statement Cleaner</h1>
+    <p>Перетащите выгрузку <b>Payment Transactions</b> из BO — инструмент уберёт служебные и чувствительные поля, исправит суммы (копейки → рубли/доллары) и оставит только депозиты и выводы. Файл обрабатывается прямо в браузере и никуда не отправляется.</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <label class="drop" id="drop" for="file">
+    <div class="chip">XLSX</div>
+    <b>Перетащите файл сюда или нажмите, чтобы выбрать</b>
+    <small>Поддерживаются .xlsx и .csv — родной экспорт из BO без правок</small>
+    <input type="file" id="file" accept=".xlsx,.xls,.csv">
+  </label>
+
+  <div id="error" class="err" style="display:none"></div>
+
+  <div id="result" class="panel" style="display:none">
+    <div class="meta-row">
+      <span>Игрок: <b id="m-player">—</b></span>
+      <span>Период: <b id="m-period">—</b></span>
+      <span class="field">Имя файла:
+        <input id="m-fname" type="text" value="Payment_Statement">
+      </span>
+    </div>
+    <div class="panel-head">
+      <div class="stats">
+        <div class="stat dep"><div class="v" id="s-dep-rub">—</div><div class="l">Депозиты, ₽</div></div>
+        <div class="stat dep"><div class="v" id="s-dep-usd">—</div><div class="l">Депозиты, $</div></div>
+        <div class="stat wd"><div class="v" id="s-wd-rub">—</div><div class="l">Выводы, ₽</div></div>
+        <div class="stat wd"><div class="v" id="s-wd-usd">—</div><div class="l">Выводы, $</div></div>
+        <div class="stat"><div class="v" id="s-net">—</div><div class="l">Net, $</div></div>
+      </div>
+      <button class="btn" id="dl" disabled>↓ Скачать чистый XLSX</button>
+    </div>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr>
+          <th>#</th><th>Date</th><th>Type</th><th>Payment Method</th>
+          <th>Amount (RUB)</th><th>Amount (USD)</th><th>Status</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+        <tfoot id="tfoot"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <p class="hint" id="hint">Что делает инструмент: оставляет колонки Date, Type, Payment Method, Amount (RUB), Amount (USD), Status. Удаляет ID транзакций, Provider External ID, Exchange Rate, комиссии, баланс, бонус-коды и поле Notes (номера карт, телефон, гео). Суммы: <b>RUB = PS. Value ÷ 100</b>, <b>USD = Value ÷ 100</b>. Строки, кроме Deposit/Withdraw, отбрасываются. В отчёт попадают <b>только успешные</b> транзакции (Processed / Success / Completed); pending, declined и failed отрезаются.</p>
+
+  <footer class="note">FRP Statement Cleaner · обработка локальная, данные не покидают браузер</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const drop = $('drop'), fileInput = $('file');
+let cleanRows = [], meta = {};
+
+const RUB = n => n.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ₽';
+const USD = n => (n<0?'-$':'$') + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+// normalize header text for matching
+const norm = s => String(s||'').toLowerCase().replace(/[^a-zа-я0-9]/gi,'');
+
+// Only these transaction states are treated as successful and kept in the report.
+// Everything else (pending, declined, failed, cancelled, expired, etc.) is dropped.
+const SUCCESS_STATES = new Set([
+  'processed','success','successful','completed','complete','done'
+]);
+
+function findCol(headers, candidates){
+  const H = headers.map(norm);
+  for(const c of candidates){
+    const i = H.indexOf(norm(c));
+    if(i>=0) return i;
+  }
+  return -1;
+}
+
+function toNum(v){
+  if(v===null||v===undefined||v==='') return NaN;
+  let s = String(v).replace(/[^0-9.\-]/g,'');
+  return parseFloat(s);
+}
+
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('hot');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hot');}));
+drop.addEventListener('drop',e=>{ if(e.dataTransfer.files.length) handle(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change',e=>{ if(e.target.files.length) handle(e.target.files[0]); });
+
+function showError(msg){
+  $('error').style.display='block';
+  $('error').innerHTML = msg;
+  $('result').style.display='none';
+}
+
+function handle(file){
+  $('error').style.display='none';
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const wb = XLSX.read(e.target.result,{type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(!rows.length){ showError('Файл пустой или не читается.'); return; }
+      process(rows, file.name);
+    }catch(err){
+      showError('Не удалось прочитать файл: '+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function process(rows, fname){
+  const headers = rows[0];
+  const cType   = findCol(headers,['Type']);
+  const cMethod = findCol(headers,['Payment Provider','Payment System','Payment Method','Provider']);
+  const cValue  = findCol(headers,['Value']);
+  const cPS     = findCol(headers,['PS. Value','PS Value','PSValue']);
+  const cState  = findCol(headers,['State','Status','External Status']);
+  const cDate   = findCol(headers,['Created At','Created','Date']);
+  const cPlayer = findCol(headers,['Player']);
+
+  if(cType<0 || cValue<0 || cPS<0){
+    showError('Не найдены ожидаемые колонки (Type / Value / PS. Value). Проверьте, что это родной экспорт Payment Transactions из BO.');
+    return;
+  }
+
+  cleanRows = [];
+  let player='', dates=[];
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r.every(c=>c==='')) continue;
+    const type = String(r[cType]||'').trim();
+    if(type!=='Deposit' && type!=='Withdraw') continue;
+
+    // Keep only successful transactions; drop pending / declined / failed / etc.
+    const stateRaw = cState>=0 ? String(r[cState]||'') : 'Processed';
+    if(!SUCCESS_STATES.has(norm(stateRaw))) continue;
+
+    const valueRaw = toNum(r[cValue]);   // account currency, in cents
+    const psRaw    = toNum(r[cPS]);       // RUB equivalent, in cents
+    if(isNaN(valueRaw) || isNaN(psRaw)) continue;
+
+    let usd = Math.round(valueRaw)/100;
+    if(type==='Withdraw') usd = -Math.abs(usd);
+    const rub = Math.round(psRaw)/100;
+
+    const date = cDate>=0 ? String(r[cDate]||'') : '';
+    if(date) dates.push(date);
+    if(!player && cPlayer>=0) player = String(r[cPlayer]||'');
+
+    cleanRows.push({
+      date, type,
+      method: cMethod>=0 ? String(r[cMethod]||'') : '',
+      rub, usd,
+      status: stateRaw
+    });
+  }
+
+  if(!cleanRows.length){
+    showError('Не найдено успешных строк Deposit или Withdraw. Возможно, все транзакции в статусе pending / declined / failed — такие в отчёт не попадают.');
+    return;
+  }
+
+  meta.player = player || '—';
+  dates.sort();
+  meta.period = dates.length ? (dates[0].split(' ')[0] + ' — ' + dates[dates.length-1].split(' ')[0]) : '—';
+  render();
+}
+
+function render(){
+  $('result').style.display='block';
+  $('m-player').textContent = meta.player;
+  $('m-period').textContent = meta.period;
+  const safe = (meta.player||'player').replace(/[^a-zA-Zа-яА-Я0-9]+/g,'_').replace(/_+$/,'');
+  $('m-fname').value = 'Payment_Statement_' + safe;
+
+  const tb = $('tbody'); tb.innerHTML='';
+  let depRub=0,depUsd=0,wdRub=0,wdUsd=0;
+  cleanRows.forEach((r,i)=>{
+    if(r.type==='Deposit'){depRub+=r.rub;depUsd+=r.usd;} else {wdRub+=r.rub;wdUsd+=r.usd;}
+    const tr=document.createElement('tr');
+    tr.className = r.type==='Deposit'?'dep':'wd';
+    tr.innerHTML = `<td>${i+1}</td><td>${r.date}</td>
+      <td><span class="badge ${r.type==='Deposit'?'dep':'wd'}">${r.type}</span></td>
+      <td>${r.method}</td>
+      <td class="num">${RUB(r.rub)}</td>
+      <td class="num">${USD(r.usd)}</td>
+      <td>${r.status}</td>`;
+    tb.appendChild(tr);
+  });
+
+  $('s-dep-rub').textContent = RUB(depRub);
+  $('s-dep-usd').textContent = USD(depUsd);
+  $('s-wd-rub').textContent  = RUB(wdRub);
+  $('s-wd-usd').textContent  = USD(wdUsd);
+  $('s-net').textContent     = USD(depUsd+wdUsd);
+
+  $('tfoot').innerHTML =
+    `<tr><td colspan="4">Итого депозиты</td><td class="num">${RUB(depRub)}</td><td class="num">${USD(depUsd)}</td><td></td></tr>
+     <tr><td colspan="4">Итого выводы</td><td class="num">${RUB(wdRub)}</td><td class="num">${USD(wdUsd)}</td><td></td></tr>
+     <tr><td colspan="4">Net (USD)</td><td class="num"></td><td class="num">${USD(depUsd+wdUsd)}</td><td></td></tr>`;
+
+  $('dl').disabled=false;
+}
+
+$('dl').addEventListener('click',()=>{
+  const aoa = [
+    ['Statement of Transactions'],
+    ['Player: '+meta.player+'    |    Period: '+meta.period],
+    [],
+    ['#','Date','Type','Payment Method','Amount (RUB)','Amount (USD)','Status']
+  ];
+  let depRub=0,depUsd=0,wdRub=0,wdUsd=0;
+  cleanRows.forEach((r,i)=>{
+    if(r.type==='Deposit'){depRub+=r.rub;depUsd+=r.usd;} else {wdRub+=r.rub;wdUsd+=r.usd;}
+    aoa.push([i+1,r.date,r.type,r.method,r.rub,r.usd,r.status]);
+  });
+  aoa.push([]);
+  aoa.push(['','','','Total Deposits',depRub,depUsd,'']);
+  aoa.push(['','','','Total Withdrawals',wdRub,wdUsd,'']);
+  aoa.push(['','','','Net (USD)','',depUsd+wdUsd,'']);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:5},{wch:20},{wch:11},{wch:16},{wch:15},{wch:14},{wch:12}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:6}},{s:{r:1,c:0},e:{r:1,c:6}}];
+  // number formats for amount columns
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for(let R=4;R<=range.e.r;R++){
+    const eAddr='E'+(R+1), fAddr='F'+(R+1);
+    if(ws[eAddr] && typeof ws[eAddr].v==='number') ws[eAddr].z='#,##0.00';
+    if(ws[fAddr] && typeof ws[fAddr].v==='number') ws[fAddr].z='$#,##0.00;($#,##0.00)';
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Transactions');
+  const name = ($('m-fname').value.trim()||'Payment_Statement') + '.xlsx';
+  XLSX.writeFile(wb,name);
+});
+</script>
+</body>
+</html>
